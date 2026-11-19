@@ -1,0 +1,40 @@
+# 构建缓存与产物
+**/.gopath/
+**/.gocache/
+**/.build/
+node_modules/
+client/android/tools/
+client/android/dist/
+client/android/.work/
+client/harmony/entry/build/
+client/harmony/.hvigor/
+client/harmony/oh_modules/
+client/harmony/dist/
+server/rhai-runner/target/
+
+# 凭据与密钥（绝不入库）
+**/.credentials.tmp
+**/.env
+!**/.env.example
+server/auth/users.txt
+server/mail/dkim.priv
+server/mail/*.env
+**/*.jks
+**/*.keystore
+**/*.p12
+**/*.cer
+**/*.p7b
+client/harmony/signature/
+
+# 第三方二进制（用各自 deploy.sh 从上游获取，不入库）
+server/auth/tinyauth
+server/mail/pmail_linux_amd64
+server/mail/pmail.zip
+server/mail/plugins/
+
+# 运行时数据与本地临时文件
+*.log
+*.db
+*.db-shm
+*.db-wal
+.tmp/

@@ -1,0 +1,121 @@
+# nginx 站点模板：API 入口（示例域名 api.example.com）
+#
+# 用法：拷到 /etc/nginx/sites-available/ 下，改 server_name 与证书路径，软链到 sites-enabled，
+#       nginx -t && systemctl reload nginx
+#
+# 路径约定（客户端认死了这三组前缀，不要随意改）：
+#   /chat/*    对话与会话   → 剥前缀转发（proxy_pass 结尾带 /）
+#   /auth/*    账号         → 剥前缀转发
+#   /admin/*   管理后台     → **保留前缀**转发（结尾不带 /）
+#   /health    探活
+#
+# 两个关键点：
+#   1. SSE 必须关掉响应缓冲（proxy_buffering off），否则流式回答会一次性吐出或卡住；
+#   2. 上传附件走 /chat/v1/files，client_max_body_size 要留够。
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name api.example.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name api.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/api.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
+
+    # 附件上传上限，按需调整
+    client_max_body_size 64m;
+
+    # ── 对话与会话（剥前缀） ────────────────────────────────────────────────
+    location /chat/ {
+        proxy_pass http://127.0.0.1:8083/;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # 流式回答必需
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding on;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # ── 账号（剥前缀） ──────────────────────────────────────────────────────
+    location /auth/ {
+        proxy_pass http://127.0.0.1:8083/;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+    }
+
+    # ── 管理后台（保留前缀；admin.html 是服务端内嵌的单页） ────────────────
+    location /admin/ {
+        proxy_pass http://127.0.0.1:8083;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_buffering off;
+    }
+
+    location = /health {
+        proxy_pass http://127.0.0.1:8083/health;
+        access_log off;
+    }
+
+    # 其余路径一律 404：不要在这里反代别的服务，免得把内部端点暴露出去
+    location / {
+        return 404;
+    }
+}
+
+# ── 可选：静态前端 + 分享页（示例域名 chat.example.com） ────────────────────
+# 前端是纯静态文件，接口地址在构建时就写死指向 api.example.com（见 docs/clients.md）。
+# 分享页由 chat-server 直接渲染到 CHAT_SHARE_DIR，链接不带 .html。
+#
+# server {
+#     listen 443 ssl;
+#     http2 on;
+#     server_name chat.example.com;
+#
+#     ssl_certificate     /etc/letsencrypt/live/chat.example.com/fullchain.pem;
+#     ssl_certificate_key /etc/letsencrypt/live/chat.example.com/privkey.pem;
+#
+#     root /opt/chatweb/www;
+#
+#     location = /                  { try_files /login.html =404; }
+#     location /static/             { expires 7d; add_header Cache-Control "public"; }
+#     location ~ ^/(favicon\.ico|favicon-\d+x\d+\.png|apple-touch-icon\.png|icon-\d+\.png)$ {
+#         expires 7d;
+#         add_header Cache-Control "public";
+#     }
+#     location = /site.webmanifest  { default_type application/manifest+json; }
+#
+#     # 会话分享页（静态 HTML 在 CHAT_SHARE_DIR，共用 /share/assets/）
+#     location /share/ {
+#         root /opt/chatweb;
+#         try_files $uri $uri.html =404;
+#         add_header X-Content-Type-Options nosniff;
+#         add_header Referrer-Policy no-referrer;
+#     }
+# }

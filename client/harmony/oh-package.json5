@@ -1,0 +1,13 @@
+{
+  "modelVersion": "5.1.0",
+  "name": "chat-demo-harmony",
+  "version": "1.0.0",
+  "description": "DeepSeek chat-demo 的 HarmonyOS 壳",
+  "main": "",
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hvigor-ohos-plugin": "5.0.0"
+  }
+}

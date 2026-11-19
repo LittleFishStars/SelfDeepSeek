@@ -1,0 +1,36 @@
+# chat-server systemd 单元
+#
+# 安装：
+#   install -m 644 deploy/chat-server.service /etc/systemd/system/chat-server.service
+#   install -m 600 .env /etc/chat-server.env      # 至少要有 DS_API_KEY
+#   install -d /var/lib/chat-server /opt/chatweb/share/assets
+#   systemctl daemon-reload && systemctl enable --now chat-server
+#   journalctl -u chat-server -f
+#
+# 注意：MemoryMax 是按「个人自用 + 纯 Go SQLite」估的；会话量很大或附件很多时，
+# 用 systemctl status chat-server 看 RSS 再调。
+
+[Unit]
+Description=chat-server (DeepSeek messages proxy + conversation store)
+Documentation=https://github.com/your-name/myself-deepseek
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 配置放这里，权限 600；改完 systemctl restart chat-server
+EnvironmentFile=/etc/chat-server.env
+ExecStart=/opt/chat-server/chat-server
+Restart=always
+RestartSec=3
+# 纯 Go，不需要额外权限
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/chat-server /opt/chatweb /var/log
+MemoryMax=256M
+StandardOutput=append:/var/log/chat-server.log
+StandardError=append:/var/log/chat-server.log
+
+[Install]
+WantedBy=multi-user.target

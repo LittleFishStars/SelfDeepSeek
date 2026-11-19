@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>DeepSeek 自托管版</title>
+<!-- PNG 放最前：比 ico 清晰，也避开 CDN 上 favicon.ico 的旧缓存 -->
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" href="/favicon.ico">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#4d6bfe">
+
+<style>
+  :root{
+    --bg:#ffffff; --card:#f6f7f9; --text:#1a1a1a; --sub:#8a8a8e;
+    --brand:#4d6bfe; --brand-weak:#eef1ff; --danger:#d4380d; --ok:#0f9d58;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#191a1c; --card:#232427; --text:#e9e9eb; --sub:#8a8a8e;
+           --brand:#6c85ff; --brand-weak:#252a45; }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;
+    display:flex;align-items:center;justify-content:center;padding:24px;
+  }
+  .wrap{width:100%;max-width:380px}
+  .logo{display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+  .logo img{width:72px;height:72px;display:block}
+  h1{font-size:19px;font-weight:600;text-align:center;margin:0 0 4px;letter-spacing:-0.2px}
+  .sub{color:var(--sub);text-align:center;font-size:13px;margin:0 0 24px}
+  .card{background:var(--card);border-radius:18px;padding:16px}
+  label{display:block;font-size:12px;color:var(--sub);margin:0 0 6px}
+  input{
+    width:100%;border:0;border-radius:12px;background:var(--bg);
+    color:var(--text);font-size:15px;padding:12px 14px;margin:0 0 14px;
+    outline:none;-webkit-appearance:none;
+  }
+  input:focus{box-shadow:0 0 0 2px var(--brand-weak) inset}
+  .row{display:flex;gap:10px}
+  .row>div{flex:1}
+  button{
+    width:100%;border:0;border-radius:14px;padding:13px 16px;font-size:15px;
+    font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  }
+  .primary{background:var(--brand);color:#fff}
+  .primary:disabled{opacity:.5}
+  .ghost{background:transparent;color:var(--brand);font-weight:500;font-size:13px;padding:10px}
+  .msg{font-size:13px;margin:12px 2px 0;min-height:20px}
+  .msg.err{color:var(--danger)}
+  .msg.ok{color:var(--ok)}
+  .tabs{display:flex;gap:8px;margin:0 0 16px;background:var(--card);border-radius:14px;padding:4px}
+  .tabs button{background:transparent;color:var(--sub);font-weight:500;padding:9px;border-radius:11px;font-size:14px}
+  .tabs button.on{background:var(--bg);color:var(--text)}
+  .hide{display:none}
+  .hint{color:var(--sub);font-size:12px;text-align:center;margin-top:18px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">
+    <img src="icon.png" alt="DeepSeek 自托管版">
+  </div>
+  <h1>DeepSeek 自托管版</h1>
+  <p class="sub">登录后即可开始对话</p>
+
+  <div class="tabs">
+    <button id="tab-login" class="on">登录</button>
+    <button id="tab-register">注册</button>
+  </div>
+
+  <!-- 登录 -->
+  <form id="form-login" class="card">
+    <label for="l-email">邮箱</label>
+    <input id="l-email" type="email" inputmode="email" autocomplete="username" placeholder="you@example.com" required>
+    <label for="l-pass">密码</label>
+    <input id="l-pass" type="password" autocomplete="current-password" placeholder="至少 8 位" required>
+    <button class="primary" type="submit">登录</button>
+  </form>
+
+  <!-- 注册 -->
+  <form id="form-register" class="card hide">
+    <label for="r-email">邮箱</label>
+    <input id="r-email" type="email" inputmode="email" autocomplete="username" placeholder="you@example.com" required>
+    <label for="r-pass">设置密码</label>
+    <input id="r-pass" type="password" autocomplete="new-password" placeholder="至少 8 位" required>
+    <button class="primary" id="btn-send" type="submit">发送验证码</button>
+    <div id="verify-box" class="hide" style="margin-top:14px">
+      <label for="r-code">邮箱验证码</label>
+      <input id="r-code" type="text" inputmode="numeric" maxlength="6" placeholder="6 位数字">
+      <button class="primary" id="btn-verify" type="button">验证并登录</button>
+      <button class="ghost" id="btn-resend" type="button">重新发送验证码</button>
+    </div>
+  </form>
+
+  <div id="msg" class="msg"></div>
+</div>
+
+<script>
+(function () {
+  // 部署地址：与 APK 里打包的 chat-demo 保持一致
+  // 账号接口在 /auth 前缀下（对话接口在 /chat，本页不用）
+  var API = 'https://api.example.com/auth';
+  // 设备类型：安卓 App 用本机回环地址加载页面，网页端走域名
+  var DEVICE = (location.hostname === '127.0.0.1' || location.hostname === 'localhost') ? 'android' : 'web';
+  var KEY = 'chat-demo:api-key';
+  var $ = function (id) { return document.getElementById(id); };
+  var msg = $('msg');
+
+  function say(text, kind) {
+    msg.textContent = text || '';
+    msg.className = 'msg' + (kind ? ' ' + kind : '');
+  }
+
+  function post(path, body) {
+    return fetch(API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        return d;
+      });
+    });
+  }
+
+  function store(token) {
+    try { localStorage.setItem(KEY, token); } catch (e) {}
+  }
+
+  function hasToken() {
+    try { return !!localStorage.getItem(KEY); } catch (e) { return false; }
+  }
+
+  // 从 TinyAuth 回调回来：login.html#token=...&email=...
+  (function consumeHash() {
+    var h = location.hash.replace(/^#/, '');
+    if (!h) return false;
+    var params = {};
+    h.split('&').forEach(function (kv) {
+      var i = kv.indexOf('=');
+      if (i > 0) params[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1));
+    });
+    if (params.token) {
+      store(params.token);
+      try { history.replaceState(null, '', 'login.html'); } catch (e) {}
+      location.replace('index.html');
+      return true;
+    }
+    return false;
+  })();
+
+  // 已有令牌时先校验：服务端不认识就清掉，留在登录页
+  if (hasToken()) {
+    fetch(API + '/v1/auth/me', { headers: { Authorization: 'Bearer ' + localStorage.getItem(KEY) } })
+      .then(function (r) {
+        if (r.ok) { location.replace('index.html'); return true }
+        try { localStorage.removeItem(KEY) } catch (e) {}
+        say('登录已失效，请重新登录', 'err')
+        return false
+      })
+      .catch(function () {
+        say('无法连接服务器，请检查网络后重试', 'err')
+      })
+    return
+  }
+
+
+  // 切换登录 / 注册
+  $('tab-login').onclick = function () {
+    $('tab-login').classList.add('on'); $('tab-register').classList.remove('on');
+    $('form-login').classList.remove('hide'); $('form-register').classList.add('hide');
+    say('');
+  };
+  $('tab-register').onclick = function () {
+    $('tab-register').classList.add('on'); $('tab-login').classList.remove('on');
+    $('form-register').classList.remove('hide'); $('form-login').classList.add('hide');
+    say('');
+  };
+
+  // 登录
+  $('form-login').onsubmit = function (ev) {
+    ev.preventDefault();
+    var email = $('l-email').value.trim();
+    var pass = $('l-pass').value;
+    say('登录中…');
+    post('/v1/auth/login', { email: email, password: pass, device: DEVICE }).then(function (d) {
+      if (!d.token) throw new Error('服务端没有返回令牌');
+      store(d.token);
+      say('登录成功，正在进入…', 'ok');
+      setTimeout(function () { location.replace('index.html'); }, 300);
+    }).catch(function (e) { say(e.message || '登录失败', 'err'); });
+  };
+
+  // 注册：发验证码
+  $('form-register').onsubmit = function (ev) {
+    ev.preventDefault();
+    var email = $('r-email').value.trim();
+    var pass = $('r-pass').value;
+    if (pass.length < 8) { say('密码至少 8 位', 'err'); return; }
+    $('btn-send').disabled = true;
+    say('发送中…');
+    post('/v1/auth/register', { email: email, password: pass }).then(function () {
+      say('验证码已发送，请查收邮箱', 'ok');
+      $('verify-box').classList.remove('hide');
+      $('btn-send').disabled = true;
+    }).catch(function (e) {
+      say(e.message || '发送失败', 'err');
+      $('btn-send').disabled = false;
+    });
+  };
+
+  // 校验验证码 → 拿令牌
+  $('btn-verify').onclick = function () {
+    var email = $('r-email').value.trim();
+    var code = $('r-code').value.trim();
+    if (!/^\d{6}$/.test(code)) { say('请输入 6 位验证码', 'err'); return; }
+    say('验证中…');
+    post('/v1/auth/verify', { email: email, code: code, device: DEVICE }).then(function (d) {
+      if (!d.token) throw new Error('服务端没有返回令牌');
+      store(d.token);
+      say('注册成功，正在进入…', 'ok');
+      setTimeout(function () { location.replace('index.html'); }, 300);
+    }).catch(function (e) { say(e.message || '验证失败', 'err'); });
+  };
+
+  // 重新发送
+  $('btn-resend').onclick = function () {
+    var email = $('r-email').value.trim();
+    say('发送中…');
+    post('/v1/auth/code', { email: email }).then(function () {
+      say('验证码已重新发送', 'ok');
+    }).catch(function (e) { say(e.message || '发送失败', 'err'); });
+  };
+})();
+</script>
+</body>
+</html>

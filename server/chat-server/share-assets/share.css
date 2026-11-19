@@ -1,0 +1,256 @@
+/* 会话分享页的共用样式：所有 /share/<uid> 都引这一份，单页不带内联 CSS。 */
+
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1f;
+  --sub: #6b7280;
+  --line: #eceef2;
+  --card: #f8f9fb;
+  --card-user: #f2f5ff;
+  --brand: #4d6bfe;
+  --code-bg: #f5f6f8;
+  --code-fg: #24292f;
+  --radius: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101114;
+    --fg: #e9eaee;
+    --sub: #9aa0a8;
+    --line: #23252b;
+    --card: #16181c;
+    --card-user: #1b2130;
+    --brand: #7c93ff;
+    --code-bg: #1b1d22;
+    --code-fg: #d8dbe2;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.75 -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans CJK SC",
+    "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+/* ---------- 头部 ---------- */
+
+.head { margin-bottom: 28px; }
+
+.brand {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.head h1 {
+  margin: 10px 0 6px;
+  font-size: 26px;
+  line-height: 1.35;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  word-break: break-word;
+}
+
+.head .meta {
+  font-size: 12.5px;
+  color: var(--sub);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 消息 ---------- */
+
+.thread { display: flex; flex-direction: column; gap: 18px; }
+
+.msg {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px 18px 18px;
+}
+
+.msg-user {
+  background: var(--card-user);
+}
+
+.who {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--sub);
+  margin-bottom: 8px;
+}
+
+.msg-user .who { color: var(--brand); }
+
+.body > :first-child { margin-top: 0; }
+.body > :last-child { margin-bottom: 0; }
+
+.body p { margin: 0 0 12px; }
+
+.body h1, .body h2, .body h3, .body h4 {
+  margin: 22px 0 10px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+.body h1 { font-size: 21px; }
+.body h2 { font-size: 19px; }
+.body h3 { font-size: 17px; }
+.body h4 { font-size: 16px; }
+
+.body ul, .body ol { margin: 0 0 12px; padding-left: 1.4em; }
+.body li { margin: 4px 0; }
+.body li > p { margin: 0; }
+
+.body a { color: var(--brand); text-decoration: none; }
+.body a:hover { text-decoration: underline; }
+
+.body blockquote {
+  margin: 12px 0;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--line);
+  color: var(--sub);
+}
+
+.body hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
+
+.body img {
+  max-width: 100%;
+  border-radius: 10px;
+  cursor: zoom-in;
+}
+
+/* 行内代码 / 代码块 */
+
+.body code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.body :not(pre) > code {
+  background: var(--code-bg);
+  color: var(--code-fg);
+  padding: 0.15em 0.4em;
+  border-radius: 6px;
+}
+
+.body pre {
+  position: relative;
+  margin: 14px 0;
+  padding: 14px 16px;
+  background: var(--code-bg);
+  color: var(--code-fg);
+  border-radius: 12px;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+.body pre code { font-size: 13px; }
+
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: 0;
+  border-radius: 8px;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sub);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.body pre:hover .copy-btn, .copy-btn:focus-visible { opacity: 1; }
+.copy-btn:hover { color: var(--fg); }
+
+/* 表格 */
+
+.body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 14px;
+  display: block;
+  overflow-x: auto;
+}
+
+.body th, .body td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.body th { font-weight: 700; color: var(--sub); }
+
+/* 附件图片 */
+
+.shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.shots img {
+  max-width: min(100%, 260px);
+  border-radius: 10px;
+  cursor: zoom-in;
+}
+
+/* 灯箱 */
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 9, 12, 0.86);
+  cursor: zoom-out;
+}
+
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 12px;
+}
+
+/* 页脚 */
+
+.foot {
+  margin-top: 36px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--sub);
+}
+
+.foot a { color: var(--brand); text-decoration: none; }
+
+@media (max-width: 520px) {
+  .page { padding: 24px 16px 48px; }
+  .head h1 { font-size: 22px; }
+  .msg { padding: 14px 15px 16px; border-radius: 14px; }
+}
