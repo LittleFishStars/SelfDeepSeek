@@ -78,7 +78,7 @@ SMTP_HOST  SMTP_PORT  SMTP_USER  SMTP_PASS  SMTP_FROM  SMTP_TLS=implicit|starttl
 `implicit` 走 465 隐式 TLS，`starttls` 走 587。没配 SMTP 时注册会直接返回 502
 「验证码邮件发送失败」，不会留下半个账号。
 
-线上现在指向本机 PMail：
+部署时指向本机 PMail 的写法：
 
 ```
 SMTP_HOST=127.0.0.1 SMTP_PORT=587 SMTP_TLS=starttls

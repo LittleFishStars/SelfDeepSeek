@@ -1,6 +1,6 @@
 # pmail（自建邮件服务器）
 
-线上：Web **https://mail.example.com**（PMail v2.9.9，systemd `pmail`），
+部署后：Web **https://mail.example.com**（PMail v2.9.9，systemd `pmail`），
 SMTP 25/465/587、IMAP 993、POP3 110/995，DB `/var/lib/pmail/pmail.db`。
 
 用途：给 [chat-server](../chat-server) 发注册验证码，以后也能当个人域名邮箱。

@@ -1,6 +1,6 @@
 # tinyauth（OIDC 身份提供方）
 
-线上：**https://auth.example.com**（systemd `tinyauth`，监听 `127.0.0.1:8010`，
+部署后：**https://auth.example.com**（systemd `tinyauth`，监听 `127.0.0.1:8010`，
 配置 `/etc/tinyauth/config.yml`，库 `/var/lib/tinyauth/tinyauth.db`）。
 
 自己实现的登录页 + 后续要接的第三方登录（GitHub / Google / 微信…）全部集中在这里，
