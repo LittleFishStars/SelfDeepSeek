@@ -5,7 +5,7 @@
 #   bash build.sh --api-origin https://api.你的域名  # 打包时改写接口地址（不改动工作树）
 #   bash build.sh --version-name 1.2.0 --version-code 7
 #
-# 产物：dist/deepseek-<version>.apk（自签名，可直接侧载）
+# 产物：dist/sds-<version>.apk（自签名，可直接侧载）
 #
 # 依赖（缺失时自动下载到 tools/）：apktool.jar（只用来取 aapt2）、android.jar、r8、uber-apk-signer
 set -euo pipefail
@@ -46,8 +46,8 @@ ANDROID_JAR="$TOOLS/android-34.jar"
 R8_JAR="$TOOLS/r8.jar"
 UAS_JAR="$TOOLS/uber-apk-signer.jar"
 AAPT2="$TOOLS/aapt2"
-KS="$TOOLS/deepseek.jks"
-KS_PASS="deepseek123"
+KS="$TOOLS/sds.jks"
+KS_PASS="sds123456"
 
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 
@@ -108,8 +108,8 @@ fi
 if [ ! -f "$KS" ]; then
     log "生成签名密钥库"
     keytool -genkeypair -keystore "$KS" -storepass "$KS_PASS" -keypass "$KS_PASS" \
-        -alias deepseek -keyalg RSA -keysize 2048 -validity 10000 \
-        -dname "CN=DeepSeek SelfHosted, O=SelfHosted, C=CN" >/dev/null 2>&1
+        -alias sds -keyalg RSA -keysize 2048 -validity 10000 \
+        -dname "CN=SelfDeepSeek, O=SelfDeepSeek, C=CN" >/dev/null 2>&1
 fi
 
 log "编译 Java → dex"
@@ -143,11 +143,11 @@ cp "$WORK/dex/classes.dex" "$WORK/zipin/classes.dex"
 (cd "$WORK/zipin" && zip -X -q "$WORK/app.apk" classes.dex)
 
 log "zipalign + 签名"
-java -jar "$UAS_JAR" -a "$WORK/app.apk" --ks "$KS" --ksAlias deepseek \
+java -jar "$UAS_JAR" -a "$WORK/app.apk" --ks "$KS" --ksAlias sds \
     --ksPass "$KS_PASS" --ksKeyPass "$KS_PASS" --overwrite 2>/dev/null \
     | grep -E "zipalign|sign|verified|Successfully" || true
 
-OUT="$DIST/deepseek-$VER_NAME.apk"
+OUT="$DIST/sds-$VER_NAME.apk"
 cp "$WORK/app.apk" "$OUT"
 
 log "自检"

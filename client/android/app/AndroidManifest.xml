@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.chatdemo">
+    package="org.selfdeepseek.chatdemo">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
 
@@ -32,13 +32,13 @@
         </activity>
         <provider
             android:name=".ShotProvider"
-            android:authorities="com.example.chatdemo.shots"
+            android:authorities="org.selfdeepseek.chatdemo.shots"
             android:exported="false"
             android:grantUriPermissions="true" />
         <!-- 更新包用 content:// 交给安装器，file:// 在 Android 7+ 会抛 FileUriExposedException -->
         <provider
             android:name=".ApkProvider"
-            android:authorities="com.example.chatdemo.apks"
+            android:authorities="org.selfdeepseek.chatdemo.apks"
             android:exported="false"
             android:grantUriPermissions="true" />
     </application>

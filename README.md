@@ -1,11 +1,20 @@
-# DeepSeek 自托管版（myself-deepseek）
+# SelfDeepSeek | SDS
 
-把 DeepSeek 官方开源前端 [chat-demo](https://github.com/deepseek-ai/chat-demo) 装进自己的服务器：
-一套自研后端负责代理上游 API、把对话落库、离线补发、附件、搜索与跨会话记忆；
-客户端是安卓 / 鸿蒙的原生壳（WebView / ArkWeb）和同一套网页端。
+**自托管的 DeepSeek 客户端与服务端。** 一套自研后端代理官方 API、把对话落库、
+支持离线补发 / 附件 / 搜索 / 跨会话记忆；客户端是安卓、鸿蒙原生壳和同一套网页端。
+
+**Self-hosted DeepSeek stack.** A Go backend proxies the official API and owns your
+conversation history; native Android & HarmonyOS shells plus a plain web client.
 
 > **与 DeepSeek 官方无关**：本仓库只代理官方公开 API，不包含官方客户端代码，
-> 也不代表 DeepSeek 官方立场。前端静态资源来自上游 MIT 项目 chat-demo 的构建产物。
+> 也不代表 DeepSeek 官方立场。前端静态资源来自上游 MIT 项目
+> [chat-demo](https://github.com/deepseek-ai/chat-demo) 的构建产物。
+
+---
+
+把 [chat-demo](https://github.com/deepseek-ai/chat-demo) 装进自己的服务器：
+一套自研后端负责代理上游 API、把对话落库、离线补发、附件、搜索与跨会话记忆；
+客户端是安卓 / 鸿蒙的原生壳（WebView / ArkWeb）和同一套网页端。
 
 ## 它和「直接用官方 App」差在哪
 
@@ -59,7 +68,7 @@ server/
   rhai-runner/      Rhai 沙箱执行器（Rust，被 chat-server 按需拉起）
   auth/ mail/       可选：第三方的 TinyAuth / PMail 部署说明（二进制需自行获取）
 client/
-  android/          安卓壳（Java）+ 打包脚本，产物 dist/deepseek-<ver>.apk
+  android/          安卓壳（Java）+ 打包脚本，产物 dist/sds-<ver>.apk
   harmony/          鸿蒙工程（ArkTS），用 DevEco / hvigor 构建 .hap
 deploy/             nginx 与 systemd 模板
 docs/               部署、配置、接口、架构、客户端文档
@@ -91,7 +100,7 @@ curl -s localhost:8083/health   # {"ok":true,...}
 ```bash
 cd client/android
 bash build.sh --api-origin https://你的后端域名     # 会把前端里的接口地址改掉
-# → dist/deepseek-1.0.0.apk
+# → dist/sds-1.0.0.apk
 ```
 
 依赖（apktool/android.jar/r8/uber-apk-signer）脚本会自动下载，

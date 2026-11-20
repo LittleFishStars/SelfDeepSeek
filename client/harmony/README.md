@@ -24,7 +24,7 @@ ArkWeb（`Web` 组件），做成一个鸿蒙原生应用 —— 与 `../android
 ## 目录结构
 
 ```
-AppScope/app.json5                       bundleName（com.example.deepseek）/ 版本 / 图标
+AppScope/app.json5                       bundleName（org.selfdeepseek.app）/ 版本 / 图标
 entry/src/main/module.json5              权限（INTERNET、MICROPHONE）、入口 Ability
 entry/src/main/ets/entryability/         应用入口（窗口、状态栏）
 entry/src/main/ets/pages/Index.ets       Web 组件 + 各回调
@@ -85,7 +85,7 @@ CERT_FILE=app.cer
 PROFILE_FILE=app-profile.p7b
 ```
 
-`bundleName` 必须与 AGC 应用一致（现在是 `com.example.deepseek`，`agconnect-services.json`
+`bundleName` 必须与 AGC 应用一致（现在是 `org.selfdeepseek.app`，`agconnect-services.json`
 里的 `package_name` 也是它）—— 不一致时安装会报 profile 与包名不匹配。
 
 ```bash

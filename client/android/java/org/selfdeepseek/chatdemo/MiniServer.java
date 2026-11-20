@@ -1,4 +1,4 @@
-package com.example.chatdemo;
+package org.selfdeepseek.chatdemo;
 
 import android.content.Context;
 import android.content.res.AssetManager;

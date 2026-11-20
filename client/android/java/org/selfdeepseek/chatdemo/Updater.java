@@ -1,4 +1,4 @@
-package com.example.chatdemo;
+package org.selfdeepseek.chatdemo;
 
 import android.app.Activity;
 import android.app.AlertDialog;

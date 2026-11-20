@@ -4,7 +4,7 @@
 装进一个 WebView 壳，做成可安装的 APK —— 但没有 8MB 的 Gradle 工程：
 `build.sh` 直接走 aapt2 官方链路，只需要 JDK。
 
-产物：`dist/deepseek-<版本>.apk`（约 1.9 MB，自签名，可直接侧载）。
+产物：`dist/sds-<版本>.apk`（约 1.9 MB，自签名，可直接侧载）。
 
 ```bash
 bash build.sh --api-origin https://api.example.com   # 打包时注入你的后端地址
@@ -74,7 +74,7 @@ bash bump.sh && bash build.sh     # 1.0.2(3) → 1.0.3(4)
 
 - 依赖（apktool.jar / android.jar / r8 / uber-apk-signer）首次构建自动下载到 `tools/`；
   aapt2 直接从 `apktool.jar` 的 `prebuilt/linux/aapt2_64` 取出，不需要 Android SDK build-tools。
-- 签名用脚本自建的 `tools/deepseek.jks`（口令 `deepseek123`），仅供侧载 ——
+- 签名用脚本自建的 `tools/sds.jks`（口令 `sds123456`），仅供侧载 ——
   要上架或长期分发，换成自己的密钥库，并把口令从脚本里挪到环境变量。
 - **代码里不能用 lambda**：javac 以 `android.jar` 为 bootclasspath 时找不到
   `java.lang.invoke.LambdaMetafactory`，会直接编译失败。
@@ -100,7 +100,7 @@ MIUI / HyperOS 的安装器（尤其开着「纯净模式 / 应用安装校验�
 
 ```bash
 # 1) 走 adb，绕过安装器 UI，失败时也会打印真实原因
-adb install -r dist/deepseek-1.0.0.apk
+adb install -r dist/sds-1.0.0.apk
 
 # 2) 或手机关掉：设置 → 应用设置 → 应用管理 → 右上角 → 安装未知应用 / 纯净模式 / 应用校验
 ```

@@ -49,13 +49,13 @@ var shareTpl = template.Must(template.New("share").Parse(`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<title>{{.Title}} · DeepSeek 自托管版</title>
+<title>{{.Title}} · SelfDeepSeek | SDS</title>
 <link rel="stylesheet" href="/share/assets/share.css">
 </head>
 <body>
 <main class="page">
   <header class="head">
-    <a class="brand" href="{{.Site}}">DeepSeek 自托管版</a>
+    <a class="brand" href="{{.Site}}">SelfDeepSeek | SDS</a>
     <h1>{{.Title}}</h1>
     <div class="meta">{{.Meta}}</div>
   </header>

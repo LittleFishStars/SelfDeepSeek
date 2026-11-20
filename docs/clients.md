@@ -24,7 +24,7 @@ cd client/android && bash build.sh --api-origin https://api.example.com
 ```bash
 cd client/android
 bash bump.sh                      # 版本号 +1（可选，函数级改动才需要）
-bash build.sh                     # → dist/deepseek-1.0.0.apk
+bash build.sh                     # → dist/sds-1.0.0.apk
 ```
 
 - 依赖（apktool/android.jar/r8/uber-apk-signer）首次构建自动下载到 `tools/`。
@@ -52,7 +52,7 @@ bash build.sh                     # → dist/deepseek-1.0.0.apk
   "versionCode": 1,
   "notes": "改了什么",
   "platforms": {
-    "android": {"versionCode": 1, "url": "https://…/deepseek-1.0.0.apk",
+    "android": {"versionCode": 1, "url": "https://…/sds-1.0.0.apk",
                 "size": 2030845, "sha256": "…"}
   }
 }

@@ -77,7 +77,7 @@ if [ "$INSTALL" = 1 ]; then
     source "$HOME/harmonyos/env.sh" 2>/dev/null || true
     hdc list targets
     hdc install -r "$HAP"
-    hdc shell aa start -a EntryAbility -b com.example.deepseek
+    hdc shell aa start -a EntryAbility -b org.selfdeepseek.app
     echo
     echo "看日志： hdc hilog -T chat-demo"
 else

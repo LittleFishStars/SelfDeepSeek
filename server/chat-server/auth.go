@@ -35,7 +35,7 @@ var (
 	smtpPass     = env("SMTP_PASS", "")
 	smtpFrom     = env("SMTP_FROM", "noreply@example.com")
 	smtpTLS      = env("SMTP_TLS", "implicit") // implicit(465) | starttls(587) | none
-	mailFromName = env("SMTP_FROM_NAME", "DeepSeek 自托管版")
+	mailFromName = env("SMTP_FROM_NAME", "SelfDeepSeek | SDS")
 )
 
 func migrateAuth() {
@@ -325,7 +325,7 @@ func authRegister(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, "db error: "+err.Error())
 		return
 	}
-	if err := (mailer{}).send(email, "DeepSeek 自托管版 · 注册验证码",
+	if err := (mailer{}).send(email, "SelfDeepSeek | SDS · 注册验证码",
 		fmt.Sprintf("你的验证码是 %s，15 分钟内有效。\r\n如果不是你本人在注册，请忽略这封邮件。", code)); err != nil {
 		// 信件发不出去就别留半个账号
 		_, _ = db.Exec(`DELETE FROM users WHERE email=? AND verified=0`, email)
@@ -355,7 +355,7 @@ func authSendCode(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 404, "邮箱未注册")
 		return
 	}
-	if err := (mailer{}).send(email, "DeepSeek 自托管版 · 验证码",
+	if err := (mailer{}).send(email, "SelfDeepSeek | SDS · 验证码",
 		fmt.Sprintf("你的验证码是 %s，15 分钟内有效。", code)); err != nil {
 		writeErr(w, 502, "验证码邮件发送失败："+err.Error())
 		return

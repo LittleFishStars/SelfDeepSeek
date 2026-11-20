@@ -56,7 +56,7 @@ set -a && . ./.env && set +a && ./chat-server
 | `SMTP_USER` | 空 | 登录名（同时用于「未配 SMTP」的启动告警判断） |
 | `SMTP_PASS` | 空 | 密码 |
 | `SMTP_FROM` | `noreply@example.com` | 发件地址 |
-| `SMTP_FROM_NAME` | `DeepSeek 自托管版` | 发件人显示名 |
+| `SMTP_FROM_NAME` | `SelfDeepSeek \| SDS` | 发件人显示名 |
 
 连 `127.0.0.1` / `localhost` 时自动跳过证书校验（自建收件服务器的证书签给域名，
 IP 必然对不上）；连真实域名则正常校验证书。

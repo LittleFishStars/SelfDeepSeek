@@ -1,4 +1,4 @@
-package com.example.chatdemo;
+package org.selfdeepseek.chatdemo;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
@@ -13,19 +13,16 @@ import java.io.File;
 import java.io.FileNotFoundException;
 
 /**
- * 极简 FileProvider：把下载好的 APK 以 content:// 交给系统安装器。
- *
- * 直接给安装器传 file:// 会在 Android 7+ 抛 FileUriExposedException；
- * 完整版 androidx FileProvider 会引入依赖，这里按 ShotProvider 的写法再来一份。
- *
- * 只暴露 cacheDir/update 下的文件，且路径必须落在该目录内（防目录穿越）。
+ * 极简 FileProvider：只为「拍照」提供 content:// 输出地址。
+ * 直接给相机传 file:// 会在 Android 7+ 抛 FileUriExposedException，
+ * 而完整版 androidx FileProvider 会引入依赖，这里自己实现一个最小可用版本。
  */
-public class ApkProvider extends ContentProvider {
+public class ShotProvider extends ContentProvider {
 
-    public static final String AUTHORITY = "com.example.chatdemo.apks";
+    public static final String AUTHORITY = "org.selfdeepseek.chatdemo.shots";
 
     static File dir(Context context) {
-        File d = new File(context.getCacheDir(), "update");
+        File d = new File(context.getCacheDir(), "shots");
         if (!d.exists()) {
             //noinspection ResultOfMethodCallIgnored
             d.mkdirs();
@@ -33,9 +30,8 @@ public class ApkProvider extends ContentProvider {
         return d;
     }
 
-    /** 用文件名（不带路径）换取 content:// 地址 */
-    public static Uri uriFor(File apk) {
-        return Uri.parse("content://" + AUTHORITY + "/" + apk.getName());
+    public static Uri uriFor(String name) {
+        return Uri.parse("content://" + AUTHORITY + "/" + name);
     }
 
     @Override
@@ -43,38 +39,24 @@ public class ApkProvider extends ContentProvider {
         return true;
     }
 
-    private File fileFor(Uri uri) throws FileNotFoundException {
-        String name = uri.getLastPathSegment();
-        if (name == null || name.isEmpty()
-                || name.contains("/") || name.contains("..")) {
-            throw new FileNotFoundException("bad name");
-        }
-        File root = dir(getContext());
-        File f = new File(root, name);
-        try {
-            // 规范化后再校验，防止 ../ 之类的写法绕出缓存目录
-            if (!f.getCanonicalPath().startsWith(root.getCanonicalPath() + File.separator)) {
-                throw new FileNotFoundException("out of root");
-            }
-        } catch (java.io.IOException e) {
-            throw new FileNotFoundException(e.getMessage());
-        }
-        return f;
+    private File fileFor(Uri uri) {
+        return new File(dir(getContext()), uri.getLastPathSegment());
     }
 
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
-        return ParcelFileDescriptor.open(fileFor(uri), ParcelFileDescriptor.MODE_READ_ONLY);
+        File f = fileFor(uri);
+        if (!f.getParentFile().exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            f.getParentFile().mkdirs();
+        }
+        return ParcelFileDescriptor.open(f,
+                ParcelFileDescriptor.MODE_CREATE | ParcelFileDescriptor.MODE_READ_WRITE);
     }
 
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] args, String sort) {
-        File f;
-        try {
-            f = fileFor(uri);
-        } catch (FileNotFoundException e) {
-            return null;
-        }
+        File f = fileFor(uri);
         String[] cols = projection != null ? projection
                 : new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE};
         MatrixCursor c = new MatrixCursor(cols, 1);
@@ -94,7 +76,7 @@ public class ApkProvider extends ContentProvider {
 
     @Override
     public String getType(Uri uri) {
-        return "application/vnd.android.package-archive";
+        return "image/jpeg";
     }
 
     @Override

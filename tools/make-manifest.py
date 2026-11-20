@@ -7,7 +7,7 @@ versionCode 一致；size 与 sha256 也必须对应同一个包，否则下载�
 用法：
     # 首次生成（安卓）
     python3 tools/make-manifest.py --platform android \\
-        --artifact client/android/dist/deepseek-1.0.0.apk \\
+        --artifact client/android/dist/sds-1.0.0.apk \\
         --base-url https://download.example.com/deepseek \\
         --notes "首个开源版"
 
