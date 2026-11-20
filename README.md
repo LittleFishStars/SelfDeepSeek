@@ -12,6 +12,20 @@ conversation history; native Android & HarmonyOS shells plus a plain web client.
 
 ---
 
+<p align="center">
+  <img src="docs/media/cover.jpg" width="640" alt="SelfDeepSeek | SDS">
+</p>
+
+<p align="center">
+  <b>58 秒看完 SelfDeepSeek</b>
+</p>
+
+<p align="center">
+  <a href="docs/media/sds-promo.mp4">
+    <img src="https://img.shields.io/badge/▶_%E7%9B%B4%E6%8E%A5%E6%92%AD%E6%94%BE-58s-coral?style=for-the-badge" alt="播放宣传视频">
+  </a>
+</p>
+
 把 [chat-demo](https://github.com/deepseek-ai/chat-demo) 装进自己的服务器：
 一套自研后端负责代理上游 API、把对话落库、离线补发、附件、搜索与跨会话记忆；
 客户端是安卓 / 鸿蒙的原生壳（WebView / ArkWeb）和同一套网页端。
