@@ -1,10 +1,13 @@
 # SelfDeepSeek | SDS
 
-**自托管的 DeepSeek 客户端与服务端。** 一套自研后端代理官方 API、把对话落库、
-支持离线补发 / 附件 / 搜索 / 跨会话记忆；客户端是安卓、鸿蒙原生壳和同一套网页端。
+**DeepSeek App 的私有化部署。** 起因是额度不够用 —— 于是自己搭了一套：一套自研后端
+代理官方 API、把对话落库、支持离线补发 / 附件 / 搜索 / 跨会话记忆；
+客户端是安卓、鸿蒙原生壳和同一套网页端。在此之上还加了几个官方没有、但平时会用到的功能。
 
-**Self-hosted DeepSeek stack.** A Go backend proxies the official API and owns your
-conversation history; native Android & HarmonyOS shells plus a plain web client.
+**A private deployment of the DeepSeek app.** Built because the quota ran out:
+a Go backend proxies the official API and owns your conversation history, with native
+Android & HarmonyOS shells plus a plain web client — plus a few extras the official app
+doesn't have.
 
 > **与 DeepSeek 官方无关**：本仓库只代理官方公开 API，不包含官方客户端代码，
 > 也不代表 DeepSeek 官方立场。前端静态资源来自上游 MIT 项目
@@ -17,18 +20,30 @@ conversation history; native Android & HarmonyOS shells plus a plain web client.
 </p>
 
 <p align="center">
-  <b>58 秒看完 SelfDeepSeek</b>
+  <b>60 秒看完 SelfDeepSeek</b>
 </p>
 
 <p align="center">
   <a href="docs/media/sds-promo.mp4">
-    <img src="https://img.shields.io/badge/▶_%E7%9B%B4%E6%8E%A5%E6%92%AD%E6%94%BE-58s-coral?style=for-the-badge" alt="播放宣传视频">
+    <img src="https://img.shields.io/badge/▶_%E7%9B%B4%E6%8E%A5%E6%92%AD%E6%94%BE-60s-coral?style=for-the-badge" alt="播放宣传视频">
   </a>
 </p>
 
 把 [chat-demo](https://github.com/deepseek-ai/chat-demo) 装进自己的服务器：
 一套自研后端负责代理上游 API、把对话落库、离线补发、附件、搜索与跨会话记忆；
 客户端是安卓 / 鸿蒙的原生壳（WebView / ArkWeb）和同一套网页端。
+
+## 为什么要自己做
+
+官方 App 的额度不够用，所以先做了个能替代的：把前端接上自己的后端，
+Key 放服务端、对话落自己的库。跑起来之后又顺手加了几个官方没有、但确实会用到的功能：
+
+- **断线也照跑** —— 生成在服务端独立进行，杀掉 App / 地铁没信号都不影响，回来自动续播
+- **完整过程落库** —— 思考、联网搜索、工具调用的中间步骤全存，换设备还原的是一整段过程
+- **跨会话记忆** —— 用户画像 + 上一次对话摘要自动注入新会话，另有 `history_search` 按关键词检索
+- **沙箱算数** —— `run_rhai` 在隔离的 Rust 进程里跑脚本，无文件 / 网络 / 进程权限，超时即杀
+- **会话分享** —— 任意对话一键生成公开静态页，不用登录就能读
+- **自带后台** —— 用户、token 消耗、会话内容、画像，页面里直接看
 
 ## 它和「直接用官方 App」差在哪
 
@@ -142,18 +157,18 @@ bash build.sh --api-origin https://你的后端域名     # 会把前端里的�
 
 ## 宣传视频
 
-`docs/media/sds-promo.mp4`（58 秒，1920×1080，中文旁白 + 原创 ambient 配乐）
+`docs/media/sds-promo.mp4`（60 秒，1920×1080，中文旁白 + 原创 ambient 配乐）
 讲清楚这东西解决什么问题、怎么搭、怎么用。
 
 ![宣传视频封面](docs/media/cover.jpg)
 
 | 段落 | 时间 | 内容 |
 | --- | --- | --- |
-| 钩子 | 0:00–0:08 | 「你每天聊的几千条对话，现在存在谁的硬盘上？」 |
+| 钩子 | 0:00–0:08 | 「DeepSeek 的额度，那就自己搭一个」 |
 | 架构 | 0:08–0:21 | 三种壳 → nginx → Go + SQLite，三个前缀怎么走 |
-| 能力 | 0:21–0:39 | 断线续跑、过程落库、跨会话记忆、沙箱算数 |
-| 上手 | 0:39–0:50 | 四条命令：clone → 填 Key → 起后端 → 打 APK |
-| 收尾 | 0:50–0:58 | Logo、定位、仓库地址 |
+| 能力 | 0:21–0:42 | 官方没有但用得到：断线续跑、过程落库、跨会话记忆、沙箱算数 |
+| 上手 | 0:42–0:53 | 四条命令：clone → 填 Key → 起后端 → 打 APK |
+| 收尾 | 0:53–1:01 | Logo、定位、仓库地址 |
 
 视频工程在 `promo/`（Remotion）：`python3 promo/tools/voiceover.py` 生成旁白，
 `python3 promo/tools/bgm.py` 合成配乐，改完文案重跑两者再渲染。
