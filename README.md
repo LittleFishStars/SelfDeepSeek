@@ -126,6 +126,24 @@ bash build.sh --api-origin https://你的后端域名     # 会把前端里的�
 | [client/android/README.md](client/android/README.md) | 安卓壳实现细节（端口为什么必须固定等） |
 | [AGENTS.md](AGENTS.md) | 给 AI/新人的仓库约定与红线 |
 
+## 宣传视频
+
+`docs/media/sds-promo.mp4`（58 秒，1920×1080，中文旁白 + 原创 ambient 配乐）
+讲清楚这东西解决什么问题、怎么搭、怎么用。
+
+![宣传视频封面](docs/media/cover.jpg)
+
+| 段落 | 时间 | 内容 |
+| --- | --- | --- |
+| 钩子 | 0:00–0:08 | 「你每天聊的几千条对话，现在存在谁的硬盘上？」 |
+| 架构 | 0:08–0:21 | 三种壳 → nginx → Go + SQLite，三个前缀怎么走 |
+| 能力 | 0:21–0:39 | 断线续跑、过程落库、跨会话记忆、沙箱算数 |
+| 上手 | 0:39–0:50 | 四条命令：clone → 填 Key → 起后端 → 打 APK |
+| 收尾 | 0:50–0:58 | Logo、定位、仓库地址 |
+
+视频工程在 `promo/`（Remotion）：`python3 promo/tools/voiceover.py` 生成旁白，
+`python3 promo/tools/bgm.py` 合成配乐，改完文案重跑两者再渲染。
+
 ## 许可
 
 自有代码以 [MIT](LICENSE) 发布；前端静态资源来自 chat-demo（MIT, © DeepSeek），
