@@ -26,6 +26,9 @@ doesn't have.
 <p align="center">
   <a href="docs/media/sds-promo.mp4">
     <img src="https://img.shields.io/badge/▶_%E7%9B%B4%E6%8E%A5%E6%92%AD%E6%94%BE-60s-coral?style=for-the-badge" alt="播放宣传视频">
+  </a>&nbsp;
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-%E9%9D%9E%E5%95%86%E7%94%A8%20MIT%20%2B%20%E5%95%86%E7%94%A8%E6%8E%88%E6%9D%83-5B9DFF?style=for-the-badge" alt="非商用 MIT，商用需授权">
   </a>
 </p>
 
@@ -175,5 +178,6 @@ bash build.sh --api-origin https://你的后端域名     # 会把前端里的�
 
 ## 许可
 
-自有代码以 [MIT](LICENSE) 发布；前端静态资源来自 chat-demo（MIT, © DeepSeek），
-第三方依赖清单见 [NOTICE.md](NOTICE.md)。
+自有代码以 **非商用 MIT** 发布：个人自用、学习、研究、开源协作免费；
+**商业使用需联系作者获得单独授权**（全文见 [LICENSE](LICENSE)）。
+前端静态资源来自 chat-demo（MIT, © DeepSeek），第三方依赖清单见 [NOTICE.md](NOTICE.md)。

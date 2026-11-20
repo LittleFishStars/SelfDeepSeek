@@ -1,6 +1,6 @@
 # 第三方组件与来源声明
 
-本仓库自有代码以 MIT 发布。以下组件来自第三方，各自遵循原许可，**不因本仓库的 MIT 而改变**。
+本仓库自有代码以「非商用 MIT + 商用授权」发布（见 [LICENSE](../LICENSE)）。以下组件来自第三方，各自遵循原许可，不受本仓库许可影响。
 
 ## 前端静态资源（client/android/app/assets、client/harmony/.../rawfile）
 

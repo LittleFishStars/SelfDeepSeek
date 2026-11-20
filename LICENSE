@@ -1,21 +1,44 @@
-MIT License
+SelfDeepSeek | SDS 自有代码许可（非商用 MIT + 商用授权）
 
-Copyright (c) 2026 SelfDeepSeek | SDS contributors
+Copyright (c) 2026 SelfDeepSeek | SDS 作者及贡献者
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+一、非商用使用 —— 依据 MIT 许可
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+任何人可以免费获取、使用、复制、修改、合并本软件，用于**非商业用途**
+（个人自用、学习、研究、开源协作、内部技术评估等），但必须满足以下全部条件：
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+  1. 在本软件的所有副本或主要部分中保留上述版权声明与本许可全文；
+  2. 修改后的文件必须带有明显的修改说明；
+  3. 本软件按「原样」提供，不附带任何明示或默示的担保。
+     作者或版权持有人不对任何索赔、损害或其他责任负责，
+     无论该责任产生于合同、侵权或其他与软件或软件使用相关的行为。
+
+二、商业使用 —— 需获得作者单独授权
+
+将本软件用于任何商业目的（包括但不限于：将本软件或其衍生作品销售、
+订阅收费、广告变现、集成到收费产品或服务中对外提供、以本软件为核心
+对外提供商业部署或技术服务），必须**事先获得作者的单独书面授权**。
+
+  商业授权联系方式：通过 GitHub 仓库提交 Issue，或在仓库 README 中
+  列明的渠道联系作者。
+
+  未获得商业授权而将本软件投入商业使用，即构成对本许可的违反，
+  作者保留依法追究责任的权利。
+
+三、第三方组件不受本许可约束
+
+本仓库中来自第三方的组件（包括但不限于上游 chat-demo 前端静态资源、
+TinyAuth、PMail、rhai 以及各 Go/Rust 依赖）各自遵循其原始许可，
+详见 NOTICE.md。本许可仅约束本仓库的自有代码。
+
+四、商标
+
+「DeepSeek」是杭州深度求索公司的商标，本仓库与其无隶属或背书关系；
+「SelfDeepSeek | SDS」名称与标识的使用应避免引起混淆。
+
+————————————————————————————————————————————
+
+本许可采用「MIT 正文 + 商业使用附加条款」的形式：
+第一节的许可声明逐字采用 MIT License 文本语义，
+第二节为作者对商业使用的附加约束，
+两者冲突时以更严格者为准。
