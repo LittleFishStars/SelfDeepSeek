@@ -21,6 +21,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"html/template"
@@ -29,7 +30,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yuin/goldmark"
@@ -50,12 +53,12 @@ var shareTpl = template.Must(template.New("share").Parse(`<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <title>{{.Title}} · SelfDeepSeek | SDS</title>
-<link rel="stylesheet" href="/share/assets/share.css">
+<link rel="stylesheet" href="/share/assets/share.css?v={{.AssetsV}}">
 </head>
 <body>
 <main class="page">
   <header class="head">
-    <a class="brand" href="{{.Site}}">SelfDeepSeek | SDS</a>
+    <span class="brand">SelfDeepSeek | SDS</span>
     <h1>{{.Title}}</h1>
     <div class="meta">{{.Meta}}</div>
   </header>
@@ -68,14 +71,48 @@ var shareTpl = template.Must(template.New("share").Parse(`<!doctype html>
     </article>
   {{end}}
   </section>
-  <footer class="foot">内容由 AI 生成，请仔细甄别 · <a href="{{.Site}}">试试这个客户端</a></footer>
+  <footer class="foot">内容由 AI 生成，请仔细甄别</footer>
 </main>
-<script src="/share/assets/share.js" defer></script>
+<script src="/share/assets/share.js?v={{.AssetsV}}" defer></script>
 </body>
 </html>
 `))
 
 var shareMD = goldmark.New(goldmark.WithExtensions(extension.GFM))
+
+// shareAssetsVersion 返回分享页静态资源的内容指纹（取前 8 位 sha256）。
+// 读取顺序：CHAT_SHARE_ASSETS 指向的源目录（部署时与线上一致），
+// 其次线上目录 /opt/chatweb/share/assets。读不到就退回进程启动时间，
+// 保证 URL 至少每次重启变化，不会永久钉死旧缓存。
+var shareAssetsVersion = func() func() string {
+	var once sync.Once
+	var ver string
+	return func() string {
+		once.Do(func() {
+			var sb strings.Builder
+			for _, dir := range []string{env("CHAT_SHARE_ASSETS", ""), shareDir() + "/assets"} {
+				if dir == "" {
+					continue
+				}
+				for _, name := range []string{"share.css", "share.js"} {
+					if b, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
+						sb.Write(b)
+					}
+				}
+				if sb.Len() > 0 {
+					break
+				}
+			}
+			if sb.Len() == 0 {
+				ver = strconv.FormatInt(time.Now().Unix(), 36)
+				return
+			}
+			sum := sha256.Sum256([]byte(sb.String()))
+			ver = hex.EncodeToString(sum[:4])
+		})
+		return ver
+	}
+}()
 
 // shareDir 分享页落盘目录
 func shareDir() string {
@@ -166,17 +203,20 @@ type shareMessage struct {
 type shareData struct {
 	Title    string
 	Meta     string
-	Site     string
 	Messages []shareMessage
+	// AssetsV 是 share.css/share.js 的内容指纹，作为 ?v= 拼进资源 URL。
+	// 不加它的话改样式后浏览器/Cloudflare 会继续用旧文件（max-age 4 小时），
+	// 表现为「代码改了、页面没变」（2026-11-22 踩过）。内容一变 URL 就变。
+	AssetsV string
 }
 
 // writeSharePage 渲染并落盘
 func writeSharePage(convID, shareID, title string, updated float64) error {
 	nodes := coalesceToolSteps(activePath(convID))
 	data := shareData{
-		Title: strings.TrimSpace(title),
-		Meta:  fmtTime(updated) + " · 对话分享",
-		Site:  shareSiteURL,
+		Title:   strings.TrimSpace(title),
+		Meta:    fmtTime(updated) + " · 对话分享",
+		AssetsV: shareAssetsVersion(),
 	}
 	if data.Title == "" {
 		data.Title = "对话分享"
@@ -274,13 +314,169 @@ func messageMarkdown(n node) string {
 	return sb.String()
 }
 
-// markdownHTML 渲染 Markdown；goldmark 默认转义原始 HTML，分享页不放行
+// markdownHTML 渲染 Markdown；goldmark 默认转义原始 HTML，分享页不放行。
+//
+// 公式要单独保出来：goldmark 会把 `\Delta` 这类反斜杠当 Markdown 转义吃掉
+// （`\Delta` → `Delta`），`$$...$$` 也会被当普通文本，页面上就只剩残缺的
+// 「Delta R_A」（2026-11-22 踩过）。这里先把公式抽成占位符，渲染完再换回
+// <span class="math">原文</span>，由 share.js 的 KaTeX auto-render 负责排版；
+// KaTeX 没加载时也还能看出这是一段公式。
 func markdownHTML(md string) template.HTML {
+	protected, maths := protectMath(md)
 	var sb strings.Builder
-	if err := shareMD.Convert([]byte(md), &sb); err != nil {
+	if err := shareMD.Convert([]byte(protected), &sb); err != nil {
 		return template.HTML(template.HTMLEscapeString(md))
 	}
-	return template.HTML(sb.String())
+	out := sb.String()
+	for i, m := range maths {
+		token := mathToken(i)
+		class := "math inline"
+		if m.block {
+			class = "math display"
+		}
+		// 公式原文做 HTML 转义后放进 span 的文本里，KaTeX 从 textContent 读取
+		repl := `<span class="` + class + `">` + template.HTMLEscapeString(m.src) + `</span>`
+		out = strings.Replace(out, token, repl, 1)
+	}
+	return template.HTML(out)
+}
+
+// protectedMath 是一段被保出来的公式原文
+type protectedMath struct {
+	src   string
+	block bool
+}
+
+// mathToken 占位符：用不可能出现在正文里的形式，且必须能穿过 goldmark 不被破坏
+func mathToken(i int) string {
+	return "MATHPLACEHOLDER" + strconv.Itoa(i) + "X"
+}
+
+// protectMath 把 $$...$$ 与 $...$ 抽成占位符，返回替换后的文本与公式表。
+// 代码块（``` / ~~~ / 行内 `code`）里的美元符号不动，避免把代码里的 $ 当公式。
+func protectMath(md string) (string, []protectedMath) {
+	var maths []protectedMath
+	var out strings.Builder
+
+	// 先按代码块切开，奇数项是代码块，原样保留
+	parts := codeBlockSplit(md)
+	for pi, part := range parts {
+		if pi%2 == 1 {
+			out.WriteString(part)
+			continue
+		}
+		out.WriteString(protectMathInText(part, &maths))
+	}
+	return out.String(), maths
+}
+
+// codeBlockSplit 按围栏代码块切分：返回 [文本, 代码块, 文本, 代码块, ...]
+func codeBlockSplit(md string) []string {
+	var parts []string
+	lines := strings.Split(md, "\n")
+	var buf strings.Builder
+	var code strings.Builder
+	inFence := false
+	var fence string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !inFence {
+			if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+				fence = trimmed[:3]
+				inFence = true
+				parts = append(parts, buf.String())
+				buf.Reset()
+				code.Reset()
+				code.WriteString(line + "\n")
+				continue
+			}
+			buf.WriteString(line + "\n")
+			continue
+		}
+		code.WriteString(line + "\n")
+		if strings.HasPrefix(trimmed, fence) {
+			inFence = false
+			parts = append(parts, code.String())
+		}
+	}
+	if inFence {
+		// 围栏没闭合：整段当代码，别丢
+		buf.WriteString(code.String())
+	}
+	parts = append(parts, buf.String())
+	return parts
+}
+
+// protectMathInText 处理非代码块文本里的公式，并把行内 `code` 跳过
+func protectMathInText(text string, maths *[]protectedMath) string {
+	var out strings.Builder
+	i := 0
+	n := len(text)
+	for i < n {
+		// 行内代码：原样跳过
+		if text[i] == '`' {
+			j := strings.IndexByte(text[i+1:], '`')
+			if j >= 0 {
+				out.WriteString(text[i : i+j+2])
+				i += j + 2
+				continue
+			}
+		}
+		// 块级公式 $$...$$
+		if strings.HasPrefix(text[i:], "$$") {
+			if end := strings.Index(text[i+2:], "$$"); end >= 0 {
+				src := text[i : i+2+end+2]
+				token := mathToken(len(*maths))
+				*maths = append(*maths, protectedMath{src: src, block: true})
+				out.WriteString(token)
+				i += 2 + end + 2
+				continue
+			}
+		}
+		// 行内公式 $...$（要求紧跟非空白，且闭合前不跨空行）
+		if text[i] == '$' {
+			if end := scanInlineMath(text, i); end > 0 {
+				src := text[i : end+1]
+				token := mathToken(len(*maths))
+				*maths = append(*maths, protectedMath{src: src, block: false})
+				out.WriteString(token)
+				i = end + 1
+				continue
+			}
+		}
+		out.WriteByte(text[i])
+		i++
+	}
+	return out.String()
+}
+
+// scanInlineMath 从 start（指向开头的 $）找行内公式的闭合 $，返回其下标；找不到返回 -1。
+// 规则：开头 $ 后面不能是空白；闭合 $ 前面不能是空白；中途不跨空行。
+func scanInlineMath(text string, start int) int {
+	if start+1 >= len(text) || text[start+1] == ' ' || text[start+1] == '\t' || text[start+1] == '\n' {
+		return -1
+	}
+	for i := start + 1; i < len(text); i++ {
+		c := text[i]
+		if c == '\\' {
+			i++ // 跳过被转义的字符
+			continue
+		}
+		if c == '\n' {
+			// 空行意味着段落结束，不是公式
+			if i+1 < len(text) && text[i+1] == '\n' {
+				return -1
+			}
+			continue
+		}
+		if c == '$' {
+			if i > start+1 && text[i-1] != ' ' && text[i-1] != '\t' && text[i-1] != '\n' {
+				return i
+			}
+			return -1
+		}
+	}
+	return -1
 }
 
 // shareImages 把消息里的图片复制到 share/img（同一 fileID 只存一份），返回可引用的 URL
@@ -324,4 +520,37 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// rerenderAllShares 按当前模板重写全部分享页（保留原 share_id，链接不变）。
+// 改分享页模板后用它批量刷新；单条失败只记日志，不影响其它页面。
+func rerenderAllShares() {
+	rows, err := db.Query(`SELECT id, share_id, title, updated_at FROM conversations WHERE share_id<>''`)
+	if err != nil {
+		log.Printf("!! 读取分享列表失败: %v", err)
+		return
+	}
+	type item struct {
+		convID, shareID, title string
+		updated                float64
+	}
+	var items []item
+	for rows.Next() {
+		var it item
+		if err := rows.Scan(&it.convID, &it.shareID, &it.title, &it.updated); err == nil {
+			items = append(items, it)
+		}
+	}
+	rows.Close()
+
+	ok, fail := 0, 0
+	for _, it := range items {
+		if err := writeSharePage(it.convID, it.shareID, it.title, it.updated); err != nil {
+			log.Printf("!! 重写分享页失败 conv=%s id=%s: %v", short(it.convID), it.shareID, err)
+			fail++
+			continue
+		}
+		ok++
+	}
+	log.Printf("分享页重写完成：成功 %d，失败 %d", ok, fail)
 }

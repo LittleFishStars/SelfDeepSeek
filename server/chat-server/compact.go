@@ -23,16 +23,18 @@ import (
 )
 
 var (
-	// deepseek-flash 上下文 1,048,576 tokens；按比例折叠（默认 80%）
-	contextWindow    = envInt("CHAT_CONTEXT_WINDOW", 1048576)
+	// 压缩阈值按「单次输出预算 max_tokens」的 compactRatio（默认 80%）触发：
+	// 达到 80% 时本轮照常完整输出，压缩只影响下一轮请求——compactMessages
+	// 在 handleProxy 发请求前调用，绝不打断正在进行的生成。
+	contextWindow    = envInt("CHAT_CONTEXT_WINDOW", 1048576) // 模型上下文窗口，仅日志参考
 	compactRatio     = envFloat("CHAT_COMPACT_RATIO", 0.8)
-	compactThreshold = envInt("CHAT_COMPACT_THRESHOLD", int(float64(contextWindow)*compactRatio))
+	compactThreshold = envInt("CHAT_COMPACT_THRESHOLD", int(float64(defaultMaxTokens)*compactRatio))
 	compactKeep      = envInt("CHAT_COMPACT_KEEP", 8)
 )
 
 func init() {
-	log.Printf("上下文压缩阈值: %d tokens（%.0f%% of %d，保留最近 %d 条）",
-		compactThreshold, compactRatio*100, contextWindow, compactKeep)
+	log.Printf("上下文压缩阈值: %d tokens（%.0f%% of max_tokens=%d，上下文窗口 %d，保留最近 %d 条）",
+		compactThreshold, compactRatio*100, defaultMaxTokens, contextWindow, compactKeep)
 }
 
 // estimateTokens 粗估 token：中日韩字符约 1 token/字，其余按 4 字符 1 token。

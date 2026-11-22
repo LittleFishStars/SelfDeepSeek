@@ -46,8 +46,12 @@ var (
 	allowAnon  = env("CHAT_ALLOW_ANON", "1") == "1"
 	defaultTok = env("CHAT_TOKEN", "")
 	reqTimeout = time.Duration(envInt("CHAT_UPSTREAM_TIMEOUT", 300)) * time.Second
-	// 客户端不传 max_tokens 时用的默认上限（模型本身允许更大）
-	defaultMaxTokens = envInt("CHAT_MAX_TOKENS", 8192)
+	// 客户端不传 max_tokens 时用的默认上限：用户要求设为 1m（1048576）。
+	// 上游实测接受该值（模型名义输出上限 393216，更大值由上游自行 clamp），
+	// 于是深度思考 + 多轮脚本 + 长回答不会在输出中途 stop_reason=max_tokens 截断。
+	// 压缩阈值 compactThreshold 按本值的 CHAT_COMPACT_RATIO（默认 80%）触发：
+	// 达到 80% 时本轮照常完整输出，压缩在下一轮请求发出前才生效，见 compact.go。
+	defaultMaxTokens = envInt("CHAT_MAX_TOKENS", 1048576)
 )
 
 func env(k, d string) string {
@@ -137,6 +141,13 @@ CREATE TABLE IF NOT EXISTS compactions (
   tokens_before  INTEGER NOT NULL DEFAULT 0,
   messages_before INTEGER NOT NULL DEFAULT 0,
   summary        TEXT NOT NULL
+);
+-- 超限图片切出来的上游 file_id 集合：客户端看到的是聚合 id，
+-- 发 messages 时按这张表展开成多个 image 块（见 imagefit.go）
+CREATE TABLE IF NOT EXISTS image_slices (
+  agg_id     TEXT PRIMARY KEY,
+  file_ids   TEXT NOT NULL,
+  created_at REAL NOT NULL DEFAULT 0
 );
 `
 
@@ -269,6 +280,13 @@ type storedMsg struct {
 // ---------------------------------------------------------------- 路由
 
 func main() {
+	// 运维子命令：按当前模板重写所有已分享的页面（改分享页模板后跑一次）。
+	// 只重写 HTML，不动 conversations.share_id —— 已有分享链接必须保持不变。
+	if len(os.Args) > 1 && os.Args[1] == "--rerender-share" {
+		openDB(dbPath)
+		rerenderAllShares()
+		return
+	}
 	if apiKey == "" {
 		log.Fatal("缺少 DS_API_KEY")
 	}
@@ -542,11 +560,16 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 	// 变更日志：让客户端知道哪些会话被删了 / 新增了
 	changes := changesSince(uid, since)
 
-	// 记录本次同步时刻（用服务端时间，避免客户端时钟漂移）
+	// 记录本次同步时刻（用服务端时间，避免客户端时钟漂移）。
+	// 只在**真的返回了数据**时推进游标：空结果（探活、无变化）推进游标会让
+	// 这期间产生的新会话永远落在 since 之前，后续增量同步再也拉不到它
+	// （症状：断线后重进看不到后台跑完的回答）。变更日志也要一并算进来。
 	now := float64(time.Now().Unix())
-	storeMu.Lock()
-	_, _ = db.Exec(`UPDATE client_tokens SET last_sync=? WHERE token=?`, now, tok)
-	storeMu.Unlock()
+	if len(collected) > 0 || len(changes) > 0 {
+		storeMu.Lock()
+		_, _ = db.Exec(`UPDATE client_tokens SET last_sync=? WHERE token=?`, now, tok)
+		storeMu.Unlock()
+	}
 	_ = device
 
 	writeJSON(w, 200, map[string]any{
@@ -771,10 +794,26 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isMessages := strings.HasSuffix(path, "/v1/messages")
+	// Files API：POST /v1/files 上传、DELETE /v1/files/{id} 删除
+	isFilesPath := strings.HasSuffix(path, "/v1/files") || strings.Contains(path, "/v1/files/")
 
 	var body []byte
 	if r.Method != http.MethodGet {
 		body, _ = io.ReadAll(io.LimitReader(r.Body, 64<<20))
+	}
+
+	// 超限图片自动切分：长截图单边超 8192 会被上游 400 拒绝，
+	// 在代理层切成多片分别上传，客户端只拿到一个聚合 file_id；
+	// 发 messages 时再按 image_slices 表展开成多个 image 块。
+	// 放在服务端意味着安卓 / 鸿蒙 / 网页三端不用各自改前端就能受益。
+	if isFilesPath {
+		if handled, err := handleSliceFiles(w, r, path, body, uid); handled {
+			if err != nil {
+				log.Printf("!! 附件切片处理失败 user=%s: %v", short(uid), err)
+				writeJSON(w, 500, map[string]any{"error": err.Error()})
+			}
+			return
+		}
 	}
 
 	// 落库：客户端每轮都会带全量历史，直接以最后一次为准
@@ -850,6 +889,16 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		// 原样透传，不要改写，否则影响上下文缓存命中。
 		// 历史里残留的 server_tool_use / 搜索结果块会让上游在流中途校验失败并断开，
 		// 发出去之前统一清掉，只保留 text 与 thinking。
+		// 聚合切片 id 展开成多个真实 image 块（超限长图在服务端被切过）
+		if raw, ok := reqObj["messages"].([]any); ok {
+			if expanded, replaced := expandSlicedImages(raw); replaced > 0 {
+				reqObj["messages"] = raw
+				if patched, err := json.Marshal(reqObj); err == nil {
+					body = patched
+				}
+				log.Printf("  图片切片展开 conv=%s 聚合=%d 展开后=%d 张", short(convID), replaced, expanded)
+			}
+		}
 		if raw, ok := reqObj["messages"].([]any); ok {
 			if sanitized, changed := sanitizeHistory(raw); changed {
 				reqObj["messages"] = sanitized

@@ -13,7 +13,8 @@ server/mail/          PMail 部署编排（收信，第三方二进制不入库�
 client/android/       WebView 安卓壳（Java）+ 打包脚本
 client/harmony/       HarmonyOS 壳（ArkTS）
 deploy/               nginx / systemd 模板
-docs/                 文档
+docs/                 文档（含 frontend-patches/：前端源码不在本仓库，
+                      必须在前端做的改动记在那里，重建时照此应用）
 tools/                改接口地址、生成更新清单
 ```
 
@@ -74,6 +75,17 @@ python3 tools/set-api-origin.py https://api.你的域名 --check
 4. 任务结束：有人完整收下就丢弃；没人收到就写 `reply_cache`，由 `/chat/v1/cache` 补发。
 5. 客户端中断会自动带 `X-Resume: 1` 重连重放。
 
+**工具循环不设业务预算**：模型改脚本重试是正常行为，想调几轮调几轮，只留宽松的
+硬上限 `toolRoundHardLimit`(30) 防跑飞；触到上限是「注入提示 + 去掉工具让模型直接
+回答」，绝不发 `error` 把输出中断。
+
+**上游 4xx 不当断流**：408/429/5xx 才重试，其余 4xx 是请求本身不合法（重试必然
+还是同样的错），直接把上游 `error.message` 透传给客户端——用户要看到真实原因，
+而不是笼统的「上游生成中断」。
+
+**压缩阈值 = `max_tokens` 的 80%**：达到阈值时**本轮照常完整输出**，压缩在下一轮
+请求发出前才生效，绝不打断正在进行的生成。
+
 改这块之前先看 `job.go` / `replycache.go` 的注释，别重新引入「空流也发送」。
 
 ## 6. 红线（都踩过）
@@ -93,6 +105,18 @@ python3 tools/set-api-origin.py https://api.你的域名 --check
   否则客户端永远看不出差异，会一直用旧缓存渲染。
 - **admin.html 是 `//go:embed` 的**：改完必须重新 `go build`，只替换旧二进制没用。
 - 生产构建会移除 `console.*`，排查前端用全局变量（如 `window.__dbg`）。
+- **超限图片要在 Files 代理层切分**：上游单边最长 8192 像素，长截图直接 400。
+  `imagefit.go` 按「仅一边超限就切、两边都超限先缩到短边等于上限再切」处理，
+  片间留重叠；客户端拿聚合 id `slice-xxxx`，发消息时展开成多个 image 块。
+  两个坑：分片上传要走 `/anthropic/v1/files`（图片不传 purpose），且**必须带
+  `anthropic-beta: files-api-2025-04-14`**——缺这个头连接会被直接重置，
+  看着像网络抖动但重试多少次都没用。
+- **分享页的公式要服务端先「保出来」**：Markdown 会把 `\Delta` 当转义吃掉、
+  `$$...$$` 当普通文本。做法见 `share.go` 的 `protectMath`：先按代码块切开，
+  把公式换成占位符 → 渲染 → 再换回 `<span class="math">`，交给 KaTeX 排版。
+  KaTeX **自托管**在 `share-assets/katex/`（别走 CDN，国内常失败）。
+  分享页静态资源 URL 要带内容指纹 `?v=`，否则改了样式页面不动（边缘缓存 4 小时）。
+- **分享页不要放跳回自家站点的链接**：品牌名用纯文本，页脚只留免责声明。
 
 ## 7. 验证要求
 

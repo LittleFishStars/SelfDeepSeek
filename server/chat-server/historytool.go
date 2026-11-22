@@ -25,8 +25,12 @@ import (
 // historyToolName 是注入给模型的工具名。
 const historyToolName = "history_search"
 
-// historyMaxRounds 限制工具循环轮数：正常一两轮就够，多了基本是模型在乱调。
-const historyMaxRounds = 3
+// 工具循环不再设业务预算：模型改脚本重试是正常行为，轮数由模型自己决定。
+// 只留一个宽松的硬上限防跑飞；断流重试单独计数，两者不共用一个预算。
+const (
+	toolRoundHardLimit = 30 // 工具轮次硬上限，正常对话远达不到；触到也只是优雅降级为直接回答
+	abortRetryLimit    = 3  // 上游断流且无正文时的重试次数，超过才发 error 兜底
+)
 
 // historyResultLimit 单次检索最多返回几条会话。
 const historyResultLimit = 5

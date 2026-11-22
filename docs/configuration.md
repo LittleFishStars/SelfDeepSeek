@@ -13,7 +13,7 @@ set -a && . ./.env && set +a && ./chat-server
 | `DS_API_KEY` | **必填** | DeepSeek API Key，只存在服务端 |
 | `DS_API_BASE` | `https://api.deepseek.com` | 上游基址，换兼容 Anthropic Messages 协议的服务时改这里 |
 | `DS_MODEL` | `deepseek-flash` | 默认模型；会话列表里存的是创建时的模型 |
-| `CHAT_MAX_TOKENS` | `8192` | 前端不发 `max_tokens` 时补的默认值。不补的话长回答会在半句处被截断 |
+| `CHAT_MAX_TOKENS` | `1048576` | 前端不发 `max_tokens` 时补的默认值（1m）。上游 `deepseek-flash` 输出上限 393216；给小了会让深度思考 + 多轮工具在正文写出来前就被 `max_tokens` 截断（界面显示「已停止」+「继续生成」） |
 | `CHAT_UPSTREAM_TIMEOUT` | `300` | 单次上游请求超时（秒），流式任务整轮上限 |
 
 ## 监听与存储
@@ -84,11 +84,14 @@ IP 必然对不上）；连真实域名则正常校验证书。
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `CHAT_CONTEXT_WINDOW` | `1048576` | 模型上下文窗口（token） |
-| `CHAT_COMPACT_RATIO` | `0.8` | 触发比例：估算 token > 窗口 × 比例时压缩 |
+| `CHAT_CONTEXT_WINDOW` | `1048576` | 模型上下文窗口（token），仅用于日志参考 |
+| `CHAT_COMPACT_RATIO` | `0.8` | 触发比例：估算 token > `CHAT_MAX_TOKENS` × 比例时压缩 |
 | `CHAT_COMPACT_THRESHOLD` | 空 | 直接指定阈值（token），填了优先于上两项 |
 | `CHAT_COMPACT_KEEP` | `8` | 压缩后保留最近多少条原文（保证角色交替） |
 | `CHAT_COMPACT_MODEL` | 同 `DS_MODEL` | 跑摘要用的模型 |
+
+压缩在**发出请求前**判定：达到阈值时本轮照常完整输出，压缩只对**下一次**请求生效，
+不会打断正在进行的生成。
 
 数据库里始终保留完整原文，压缩只影响发给上游的上下文；每次压缩写一行 `compactions` 表便于追溯。
 
@@ -115,6 +118,20 @@ IP 必然对不上）；连真实域名则正常校验证书。
 
 隔离靠四层：Rhai 引擎不注册任何 IO；`max_operations` 打断死循环；Go 按超时 kill 进程；
 脚本的 `print` 重定向到缓冲区。详见 [server/rhai-runner](../server/rhai-runner)。
+
+## 超限图片自动切分
+
+上游对图片有**单边最长 8192 像素**的硬限制（一次带 ≥15 张图时降为 4096），
+长截图会直接 400。后端在 Files 代理层自动处理，客户端无需改动：
+
+- 仅长或宽超限 → 不缩放，沿超限方向切成恰好满足条件的最少张数，片间留重叠；
+- 两边都超限 → 先等比压缩到短边恰好等于上限，再切分。
+- 客户端拿到的是聚合 id `slice-xxxx`，真实上游 id 列表存在 `image_slices` 表，
+  发消息时展开成多个 image 块。切分失败会回退原样上传，让上游给出权威报错。
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `CHAT_TRACE_DIR` | 空 | 非空则把上游原始事件落盘，排查「流里没内容」这类问题用 |
 
 ## 调试
 

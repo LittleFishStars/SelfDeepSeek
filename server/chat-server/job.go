@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -24,6 +25,9 @@ type streamJob struct {
 	delivered bool
 	uid       string
 	subs      map[chan struct{}]struct{}
+	// fileIDs 是本轮请求里引用的上游 file_id（图片块），
+	// 收到「图片超限」时用来构造前端可自愈的「file_id 失效」错误（见 appendUpstreamError）。
+	fileIDs []string
 }
 
 var (
@@ -121,14 +125,41 @@ func runJob(j *streamJob, req *http.Request, body []byte, convID string) {
 		}
 	}()
 
+	// 记录本轮引用的图片 file_id：收到「图片超限」时用它们构造
+	// 前端可自愈的「file_id 失效」错误，触发重新上传（走切分链路）。
+	{
+		var probe map[string]any
+		if err := json.Unmarshal(body, &probe); err == nil {
+			if msgs, ok := probe["messages"].([]any); ok {
+				j.fileIDs = collectImageFileIDs(msgs)
+			}
+		}
+	}
+
 	bodyForAttempt := body
 	// 历史检索的工具循环：模型调 history_search 时，服务端自己执行并把结果回灌，
-	// 再请求一次，直到它不再调工具（上限 historyMaxRounds 轮）。
+	// 再请求一次，直到它不再调工具（不设业务预算，只留 toolRoundHardLimit 硬上限）。
 	// 合成块的索引从 1000 起：工具轮次之后的正文块又从 index 0 开始，
 	// 用低位会和正文撞车，客户端按 index 合并时会把检索块覆盖掉。
 	blockBase := 1000
-	for round := 0; round < historyMaxRounds; round++ {
-		textLen, stopped, aborted, calls := runOnce(j, req, bodyForAttempt, convID, round > 0)
+	// 工具轮次不设业务预算：run_rhai 脚本出错后模型改脚本重试是正常行为，
+	// 写多少轮由模型自己决定，服务端只负责执行并回灌结果。
+	// 只有一个很宽松的硬上限 toolRoundHardLimit 防跑飞；真到了上限也是
+	// 优雅降级——注入提示 + 去掉服务端工具让模型直接回答，绝不发 error
+	// 把输出中断掉。断流重试（上游无 message_stop 且无正文）另算，
+	// 最多 abortRetryLimit 次，超过才发 error 兜底。
+	toolRounds := 0
+	abortRetries := 0
+	for round := 0; round < toolRoundHardLimit+abortRetryLimit; round++ {
+		textLen, stopped, aborted, calls, rejected := runOnce(j, req, bodyForAttempt, convID, round > 0)
+		if rejected != "" {
+			// 上游明确拒绝：重试无意义，直接把真实原因作为 error 事件下发，
+			// 客户端会原样显示这句话，用户能看到「图片单边超过 8192 像素」这类具体原因。
+			j.appendUpstreamError(rejected)
+			log.Printf("  上游拒绝，已透传原因 conv=%s", short(convID))
+			j.finish("upstream rejected")
+			return
+		}
 		if stopped && len(calls) > 0 {
 			if round == 0 {
 				// 工具轮次的原始事件不转发，客户端就收不到 message_start；
@@ -173,8 +204,18 @@ func runJob(j *streamJob, req *http.Request, body []byte, convID string) {
 				}
 			}
 			bodyForAttempt = buildToolRound(bodyForAttempt, calls, results, "")
-			log.Printf("  工具轮次 %d conv=%s 调用=%d（检索 %d，脚本 %d）",
-				round+1, short(convID), len(calls), len(history), len(rhai))
+			toolRounds++
+			if toolRounds >= toolRoundHardLimit {
+				// 触到硬上限：本轮的错误信息已回灌，优雅降级为直接回答，
+				// 绝不发 error 中断输出。去掉服务端工具，并合并一条明确提示
+				// （见 appendNoToolNotice），防止模型把工具调用标签当正文吐出。
+				bodyForAttempt = appendNoToolNotice(bodyForAttempt)
+				bodyForAttempt = stripServerTools(bodyForAttempt)
+				log.Printf("  工具轮次触到硬上限 %d，去掉服务端工具强制直接回答 conv=%s", toolRoundHardLimit, short(convID))
+			} else {
+				log.Printf("  工具轮次 %d conv=%s 调用=%d（检索 %d，脚本 %d）",
+					toolRounds, short(convID), len(calls), len(history), len(rhai))
+			}
 			continue
 		}
 		if stopped || textLen > 0 {
@@ -187,33 +228,46 @@ func runJob(j *streamJob, req *http.Request, body []byte, convID string) {
 			return
 		}
 		// 断流重试：换掉联网搜索工具，减少再次触发同一问题
+		abortRetries++
+		if abortRetries > abortRetryLimit {
+			break
+		}
 		bodyForAttempt = stripWebSearch(bodyForAttempt)
-		log.Printf("  上游断流且无正文，重试 conv=%s attempt=%d", short(convID), round+1)
+		log.Printf("  上游断流且无正文，重试 conv=%s attempt=%d", short(convID), abortRetries)
 	}
 	j.append(`data: {"type":"error","error":{"type":"server_error","message":"上游生成中断，请重试"}}`)
 	j.append("")
 	j.finish("upstream aborted")
 }
 
-// runOnce 跑一次上游请求。返回值：正文长度、是否收到 message_stop、是否异常中断。
+// runOnce 跑一次上游请求。返回值：正文长度、是否收到 message_stop、是否异常中断、
+// 工具调用、上游拒绝说明。
+// 第五个返回值非空表示上游**明确拒绝**（4xx，除 408/429）：重试也不会成功，
+// 必须把真实原因报给客户端，不能当成断流去重试（2026-11-22 踩过：一张
+// 1095x21555 的长截图超了上游「单边最长 8192 像素」，返回 400，
+// 却被当断流重试 3 次，最后显示「上游生成中断，请重试」，用户完全不知道原因）。
 // 事件先写进本地 pending，确认有正文后再一次性发布，失败的那次客户端看不到。
-func runOnce(j *streamJob, req *http.Request, body []byte, convID string, followUp bool) (int, bool, bool, []toolCall) {
+func runOnce(j *streamJob, req *http.Request, body []byte, convID string, followUp bool) (int, bool, bool, []toolCall, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), reqTimeout)
 	defer cancel()
 	out, err := http.NewRequestWithContext(ctx, http.MethodPost, req.URL.String(), strings.NewReader(string(body)))
 	if err != nil {
-		return 0, false, true, nil
+		return 0, false, true, nil, ""
 	}
 	out.Header = req.Header.Clone()
 	resp, err := upstreamClient.Do(out)
 	if err != nil {
 		log.Printf("!! 上游请求失败 conv=%s: %v", short(convID), err)
-		return 0, false, true, nil
+		return 0, false, true, nil, ""
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		log.Printf("!! 上游状态码 conv=%s: %d", short(convID), resp.StatusCode)
-		return 0, false, true, nil
+		msg := upstreamErrorMessage(resp)
+		log.Printf("!! 上游状态码 conv=%s: %d %s", short(convID), resp.StatusCode, truncateText(msg, 300))
+		if retryableStatus(resp.StatusCode) {
+			return 0, false, true, nil, ""
+		}
+		return 0, false, true, nil, msg
 	}
 
 	var text, thinking strings.Builder
@@ -324,9 +378,103 @@ func runOnce(j *streamJob, req *http.Request, body []byte, convID string, follow
 	log.Printf("  任务尝试结束 conv=%s 正文=%d字 stop=%v", short(convID), text.Len(), sawStop)
 	// 只有正常结束（sawStop）才认工具调用，断流的半截不算
 	if !sawStop {
-		return text.Len(), sawStop, true, nil
+		return text.Len(), sawStop, true, nil, ""
 	}
-	return text.Len(), sawStop, false, toolCalls.calls()
+	return text.Len(), sawStop, false, toolCalls.calls(), ""
+}
+
+// retryableStatus 判断上游状态码是否值得重试：
+// 408/429 与 5xx 是临时性的（超时、限流、上游抖动），可以退避后重来；
+// 其余 4xx 是请求本身有问题（参数、图片超限、鉴权），重试必然还是同样的错。
+func retryableStatus(code int) bool {
+	if code == http.StatusRequestTimeout || code == http.StatusTooManyRequests {
+		return true
+	}
+	return code >= 500
+}
+
+// upstreamErrorMessage 从上游错误响应里取出人类可读的原因。
+// 优先 JSON 的 error.message（Anthropic 兼容格式），退回纯文本，都读不到给状态码。
+func upstreamErrorMessage(resp *http.Response) string {
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	text := strings.TrimSpace(string(data))
+	var ev struct {
+		Type  string `json:"type"`
+		Error struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(text), &ev); err == nil && strings.TrimSpace(ev.Error.Message) != "" {
+		return strings.TrimSpace(ev.Error.Message)
+	}
+	if text != "" {
+		return truncateText(text, 600)
+	}
+	return fmt.Sprintf("上游返回 HTTP %d", resp.StatusCode)
+}
+
+// appendUpstreamError 把上游拒绝的原因按 Anthropic 的 error 帧下发，
+// 客户端 parseEvent/streamMessage 会抛 ApiError('stream', message) 并显示这句话。
+func (j *streamJob) appendUpstreamError(message string) {
+	// 「图片单边超限」说明这个 file_id 指向的是未切分的老图：前端本地有原件，
+	// 只要按「file_id 失效」重传一次就能走新的切分上传链路自愈。
+	// 前端 getFileErrorCode 认这个固定文案，extractFileIds 会从文案里提取
+	// file-api-xxx 并重置对应附件的 serverId（见 errors.ts / reuploadInvalidatedFiles）。
+	if strings.Contains(message, "image is too large") || strings.Contains(message, "at most 8192 pixels") {
+		ids := j.fileIDs
+		if len(ids) > 0 {
+			parts := make([]string, 0, len(ids))
+			for _, id := range ids {
+				if strings.HasPrefix(id, "file-api-") {
+					parts = append(parts, id)
+				}
+			}
+			if len(parts) > 0 {
+				message = "file_ids do not exist or are not created under your account: " +
+					strings.Join(parts, ", ") +
+					"。该图片超过 8192 像素，需重新上传以自动切分。"
+			}
+		}
+	}
+	j.appendSSE("error", map[string]any{
+		"type": "error",
+		"error": map[string]any{
+			"type":    "invalid_request_error",
+			"message": truncateText(message, 600),
+		},
+	})
+}
+
+// collectImageFileIDs 从请求 messages 里收集图片块的 file_id，写进 job
+func collectImageFileIDs(messages []any) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, item := range messages {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		blocks, ok := m["content"].([]any)
+		if !ok {
+			continue
+		}
+		for _, b := range blocks {
+			bm, ok := b.(map[string]any)
+			if !ok || bm["type"] != "image" {
+				continue
+			}
+			src, ok := bm["source"].(map[string]any)
+			if !ok || src["type"] != "file" {
+				continue
+			}
+			if id, _ := src["file_id"].(string); id != "" && !seen[id] {
+				seen[id] = true
+				out = append(out, id)
+			}
+		}
+	}
+	return out
 }
 
 // stripWebSearch 去掉请求体里的联网搜索工具与提示
@@ -347,6 +495,71 @@ func stripWebSearch(body []byte) []byte {
 		}
 		obj["tools"] = kept
 	}
+	if patched, err := json.Marshal(obj); err == nil {
+		return patched
+	}
+	return body
+}
+
+// stripServerTools 去掉请求体里服务端执行的工具（run_rhai / history_search），
+// 保留上游自己执行的联网搜索。工具轮次预算用尽时调用：错误信息已经回灌给
+// 模型，去掉工具后下一轮模型只能直接回答，避免「脚本出错 → 轮次耗尽 →
+// 直接发 error 事件把输出中断掉」。
+func stripServerTools(body []byte) []byte {
+	var obj map[string]any
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return body
+	}
+	if list, ok := obj["tools"].([]any); ok {
+		kept := make([]any, 0, len(list))
+		for _, t := range list {
+			if m, ok := t.(map[string]any); ok {
+				if name, _ := m["name"].(string); name == rhaiToolName || name == historyToolName {
+					continue
+				}
+			}
+			kept = append(kept, t)
+		}
+		obj["tools"] = kept
+	}
+	if patched, err := json.Marshal(obj); err == nil {
+		return patched
+	}
+	return body
+}
+
+// appendNoToolNotice 在工具轮次预算耗尽后，把「工具不可用、直接回答」的提示
+// 并进 buildToolRound 刚追加的最后一条 user(tool_result) 消息里。
+// 去掉 tools 定义本身不够：实测模型偶尔会把工具调用格式（<｜DSML｜ calls>
+// 之类的标签）当正文输出，前端把全角 ｜ 当 Markdown 表格分隔渲染成乱码。
+// 关键是**不能新追加一条独立的 user 消息**——那会形成连续两条 user，
+// 上游遇到连续 user 会立刻断流（见 AGENTS.md 已知坑）。
+func appendNoToolNotice(body []byte) []byte {
+	var obj map[string]any
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return body
+	}
+	msgs, _ := obj["messages"].([]any)
+	if len(msgs) == 0 {
+		return body
+	}
+	notice := "\n\n【系统提示】沙箱工具已达到本轮调用上限，当前不可再调用任何工具。" +
+		"请不要输出任何工具调用标签或伪装的调用文本，直接用自然语言给出最终答案。" +
+		"如果脚本执行有报错，就根据已知信息直接回答或说明无法得出结果。"
+	last, ok := msgs[len(msgs)-1].(map[string]any)
+	if !ok || last["role"] != "user" {
+		return body
+	}
+	switch c := last["content"].(type) {
+	case string:
+		last["content"] = c + notice
+	case []any:
+		// tool_result 块数组：把提示作为一个 text 块并进去，仍是同一条 user 消息
+		last["content"] = append(c, map[string]any{"type": "text", "text": notice})
+	default:
+		return body
+	}
+	obj["messages"] = msgs
 	if patched, err := json.Marshal(obj); err == nil {
 		return patched
 	}

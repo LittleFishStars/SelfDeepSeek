@@ -39,10 +39,21 @@ body {
     "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, sans-serif;
 }
 
+/* 正文容器宽度按屏幕长宽比决定，分界 1:1（2026-11-22 用户要求）：
+   - 宽屏（宽 >= 高，横屏/桌面）：占视口 80%，两侧留白，避免长行难读
+   - 窄屏（宽 < 高，竖屏手机）：全宽（左右只留 padding）
+   用 aspect-ratio 媒体查询而不是 min-width：竖着的平板/分屏窗口虽然像素够宽，
+   但可用高度更大，按宽度给 80% 反而更挤。 */
 .page {
-  max-width: 720px;
+  width: 100%;
   margin: 0 auto;
   padding: 32px 20px 64px;
+}
+
+@media (min-aspect-ratio: 1/1) {
+  .page {
+    width: 80%;
+  }
 }
 
 /* ---------- 头部 ---------- */
@@ -247,7 +258,44 @@ body {
   color: var(--sub);
 }
 
-.foot a { color: var(--brand); text-decoration: none; }
+/* 数学公式：服务端把原文包在 .math 里，KaTeX 加载后由 auto-render 替换成排版好的节点。
+   加载失败时保留源码，所以给一点等宽字体与横向滚动，别撑破布局。 */
+.math.display {
+  display: block;
+  margin: 14px 0;
+  text-align: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.math.inline {
+  white-space: nowrap;
+}
+
+/* KaTeX 没加载成功时（或渲染前的瞬间）源码形态 */
+body:not(.math-ready) .math {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.94em;
+  color: var(--fg);
+  background: var(--code-bg, rgba(127, 127, 127, 0.09));
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+body:not(.math-ready) .math.display {
+  display: block;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+}
+
+/* KaTeX 渲染完成后去掉上面的源码底纹 */
+.math-ready .katex-display {
+  margin: 14px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 
 @media (max-width: 520px) {
   .page { padding: 24px 16px 48px; }

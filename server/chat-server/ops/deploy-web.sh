@@ -16,6 +16,17 @@ echo "==> 上传到 /opt/chatweb/www"
 ssh "$HOST" 'rm -rf /opt/chatweb/www && mkdir -p /opt/chatweb/www'
 ssh "$HOST" 'tar -xzf - -C /opt/chatweb/www && chmod -R a+rX /opt/chatweb/www' < "$TMP/web.tgz"
 
+# 分享页共用样式/脚本：/share/<uid> 与它引用的 /share/assets/share.{css,js}。
+# 这两份文件**没有别的部署途径**（share.go 只 MkdirAll 不写文件），
+# 漏了就表现为分享页能打开但没样式、代码块没「复制」按钮。
+echo "==> 上传分享页资源"
+ssh "$HOST" 'mkdir -p /opt/chatweb/share/assets'
+ssh "$HOST" 'tar -xzf - -C /opt/chatweb/share/assets --strip-components=1' \
+  < <(tar -czf - -C "$ROOT/share-assets" .)
+# 整目录放开读权限：katex/ 下有子目录（fonts），必须 a+X 让目录可进入，
+# 否则字体 403、公式没字形。
+ssh "$HOST" 'chmod -R a+rX /opt/chatweb/share/assets' 
+
 echo "==> 写 nginx 配置（幂等）"
 ssh "$HOST" 'cat > /tmp/setup_root_web.py' <<'PYCFG'
 import re
@@ -126,3 +137,6 @@ curl -s -o /dev/null -w "API   %{http_code}\n" https://api.example.com/health
 # 查 PNG 而不是 /favicon.ico：后者在 Cloudflare 上有旧缓存（301 -> icon.png），
 # 源站已改直出，但边缘要等 TTL 过期，用它自检会误报。
 curl -s -o /dev/null -w "图标  %{http_code}\n" https://chat.example.com/favicon-32x32.png
+# 分享页样式：漏部署会让分享页只剩裸 HTML（2026-11-22 踩过）。
+# 带 ?v= 绕过 Cloudflare 边缘缓存（404 也会被缓存 4 小时）。
+curl -s -o /dev/null -w "分享样式 %{http_code}\n" "https://chat.example.com/share/assets/share.css?v=$(date +%s)"
